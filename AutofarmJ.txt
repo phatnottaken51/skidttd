@@ -1,0 +1,40 @@
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local remote = RS:WaitForChild("NetworkingContainer"):WaitForChild("DataRemote")
+
+--========================
+-- AUTO SKIP
+--========================
+
+while true do
+
+    task.wait(0.3)
+
+    local success, err = pcall(function()
+
+        local matchGui = player.PlayerGui:FindFirstChild("Match")
+        if not matchGui then
+            return
+        end
+
+        local top = matchGui:FindFirstChild("TopFrame")
+        if not top then
+            return
+        end
+
+        local skip = top:FindFirstChild("SkipWave")
+
+        if skip and skip.Visible then
+
+            remote:FireServer({
+                {"â‚("}
+            })
+        end
+    end)
+
+    if not success then
+        warn(err)
+    end
+end
