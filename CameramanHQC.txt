@@ -1,0 +1,200 @@
+local player = game.Players.LocalPlayer
+local vim = game:GetService("VirtualInputManager")
+
+local selectedLift = nil
+
+--========================
+-- STUCK CHECK
+--========================
+
+local lastPosition = nil
+local stillTime = 0
+
+local function isPlayerStuck()
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+    if not hrp then
+        return false
+    end
+
+    if not lastPosition then
+        lastPosition = hrp.Position
+        return false
+    end
+
+    local distance = (hrp.Position - lastPosition).Magnitude
+
+    -- à¸–à¹‰à¸²à¸‚à¸¢à¸±à¸šà¸™à¹‰à¸­à¸¢à¸¡à¸²à¸ = à¸–à¸·à¸­à¸§à¹ˆà¸²à¸­à¸¢à¸¹à¹ˆà¸à¸±à¸šà¸—à¸µà¹ˆ
+    if distance < 1 then
+        stillTime += 0.5
+    else
+        stillTime = 0
+        lastPosition = hrp.Position
+    end
+
+    -- à¸­à¸¢à¸¹à¹ˆà¸à¸±à¸šà¸—à¸µà¹ˆà¹€à¸à¸´à¸™ 5 à¸§à¸´
+    if stillTime >= 5 then
+        stillTime = 0
+        lastPosition = hrp.Position
+        return true
+    end
+
+    return false
+end
+
+--========================
+-- LOGIC FUNCTIONS
+--========================
+
+local function isLobby()
+    return workspace:FindFirstChild("Lifts") ~= nil
+end
+
+-- à¸«à¸²à¸¥à¸´à¸Ÿà¸•à¹Œ Desert à¸—à¸µà¹ˆà¸§à¹ˆà¸²à¸‡
+local function findEmptyCameramanHQLift()
+    local folder = workspace:FindFirstChild("Lifts")
+    if not folder then return nil end
+
+    for _, v in ipairs(folder:GetChildren()) do
+        if v.Name == "CameramanHQ" and v:FindFirstChild("Base") then
+            local countLabel = v.Base:FindFirstChild("StatusGui")
+                and v.Base.StatusGui:FindFirstChild("PlayersCount")
+
+            if countLabel then
+                local current = tonumber(string.match(countLabel.Text, "(%d+)/"))
+
+                if current == 0 then
+                    return v
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+-- à¹€à¸Šà¹‡à¸„à¸ˆà¸³à¸™à¸§à¸™à¸„à¸™à¹ƒà¸™à¸¥à¸´à¸Ÿà¸•à¹Œ
+local function getPlayerCount(lift)
+    if not lift or not lift:FindFirstChild("Base") then
+        return 99
+    end
+
+    local success, result = pcall(function()
+        local label = lift.Base.StatusGui.PlayersCount
+        return tonumber(string.match(label.Text, "(%d+)/")) or 99
+    end)
+
+    return success and result or 99
+end
+
+-- à¸à¸” Start
+local function pressStartButton()
+
+    local lobbyGui = player.PlayerGui:FindFirstChild("Lobby")
+    local startBtn = lobbyGui and lobbyGui:FindFirstChild("Start", true)
+
+    if startBtn and startBtn.Visible and startBtn.Parent.Visible then
+
+        --========================
+        -- METHOD 1
+        -- Activated
+        --========================
+
+        pcall(function()
+
+            for _, v in pairs(getconnections(startBtn.Activated)) do
+                v:Fire()
+            end
+        end)
+
+        task.wait(0.05)
+
+        --========================
+        -- METHOD 2
+        -- MouseButton1Click
+        --========================
+
+        pcall(function()
+
+            for _, v in pairs(getconnections(startBtn.MouseButton1Click)) do
+                v:Fire()
+            end
+        end)
+
+        task.wait(0.05)
+
+        --========================
+        -- METHOD 3
+        -- VirtualInput
+        --========================
+
+        local pos = startBtn.AbsolutePosition
+        local size = startBtn.AbsoluteSize
+
+        local inset = game:GetService("GuiService"):GetGuiInset()
+
+        local centerX = pos.X + (size.X / 2)
+        local centerY = pos.Y + (size.Y / 2.5) + inset.Y
+
+        vim:SendMouseMoveEvent(centerX, centerY, game)
+
+        task.wait()
+
+        vim:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+        task.wait(0.1)
+        vim:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+    end
+end
+
+-- à¸§à¸²à¸£à¹Œà¸›à¹€à¸‚à¹‰à¸²à¸¥à¸´à¸Ÿà¸•à¹Œ
+local function teleportToLift(lift)
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+
+    if hrp and lift and lift:FindFirstChild("Base") then
+        hrp.CFrame = lift.Base.CFrame + Vector3.new(0, 3, 0)
+    end
+end
+
+--========================
+-- MAIN LOBBY LOOP
+--========================
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+
+        if isLobby() then
+
+            -- à¸–à¹‰à¸²à¸¢à¸·à¸™à¸™à¸´à¹ˆà¸‡à¹€à¸à¸´à¸™ 5 à¸§à¸´ à¸£à¸µà¸«à¸²à¸¥à¸´à¸Ÿà¸•à¹Œà¹ƒà¸«à¸¡à¹ˆ
+            if isPlayerStuck() then
+                selectedLift = nil
+            end
+
+            -- à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸¥à¸´à¸Ÿà¸•à¹Œ à¸«à¸£à¸·à¸­à¸¡à¸µà¸„à¸™à¸­à¸·à¹ˆà¸™à¹€à¸‚à¹‰à¸²à¸¡à¸²
+            if not selectedLift or getPlayerCount(selectedLift) > 1 then
+
+                local target = findEmptyCameramanHQLift()
+
+                if target then
+                    selectedLift = target
+                    teleportToLift(selectedLift)
+                    task.wait(1)
+                end
+
+            else
+
+                -- à¸­à¸¢à¸¹à¹ˆà¸„à¸™à¹€à¸”à¸µà¸¢à¸§ à¸à¸” Start
+                if getPlayerCount(selectedLift) == 1 then
+                    pressStartButton()
+                end
+
+            end
+
+        else
+            selectedLift = nil
+            stillTime = 0
+            lastPosition = nil
+        end
+    end
+end)
