@@ -1,0 +1,196 @@
+local player = game.Players.LocalPlayer
+local vim = game:GetService("VirtualInputManager")
+
+local selectedPortal = nil
+
+--========================
+-- STUCK CHECK
+--========================
+
+local lastPosition = nil
+local stillTime = 0
+
+local function isPlayerStuck()
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+    if not hrp then
+        return false
+    end
+
+    if not lastPosition then
+        lastPosition = hrp.Position
+        return false
+    end
+
+    local distance = (hrp.Position - lastPosition).Magnitude
+
+    if distance < 1 then
+        stillTime += 0.5
+    else
+        stillTime = 0
+        lastPosition = hrp.Position
+    end
+
+    if stillTime >= 5 then
+        stillTime = 0
+        lastPosition = hrp.Position
+        return true
+    end
+
+    return false
+end
+
+--========================
+-- CHECK PLACE
+--========================
+
+local function isLobby()
+    return workspace:FindFirstChild("Illusion") ~= nil
+end
+
+--========================
+-- FIND PORTAL
+--========================
+
+local function getLegacyPortal()
+    local illusion = workspace:FindFirstChild("Illusion")
+
+    if not illusion then
+        return nil
+    end
+
+    local legacy = illusion:FindFirstChild("LegacyPortal")
+
+    if not legacy then
+        return nil
+    end
+
+    return legacy:FindFirstChild("PortalZone")
+end
+
+--========================
+-- PRESS TELEPORT BUTTON
+--========================
+
+local function pressTeleportButton()
+
+    local teleportsGui = player.PlayerGui:FindFirstChild("Teleports")
+
+    if not teleportsGui then
+        return
+    end
+
+    local frame = teleportsGui:FindFirstChild("Lobby -> Legacy")
+
+    if not frame then
+        return
+    end
+
+    local teleportFrame = frame:FindFirstChild("Teleport")
+
+    if not teleportFrame then
+        return
+    end
+
+    local button = teleportFrame:FindFirstChild("Button")
+
+    if not button or not button.Visible or not button.Parent.Visible then
+        return
+    end
+
+    --========================
+    -- METHOD 1
+    -- Activated
+    --========================
+
+    pcall(function()
+        for _, v in pairs(getconnections(button.Activated)) do
+            v:Fire()
+        end
+    end)
+
+    task.wait(0.05)
+
+    --========================
+    -- METHOD 2
+    -- MouseButton1Click
+    --========================
+
+    pcall(function()
+        for _, v in pairs(getconnections(button.MouseButton1Click)) do
+            v:Fire()
+        end
+    end)
+
+    task.wait(0.05)
+
+    --========================
+    -- METHOD 3
+    -- VirtualInput
+    --========================
+
+    local pos = button.AbsolutePosition
+    local size = button.AbsoluteSize
+
+    local inset = game:GetService("GuiService"):GetGuiInset()
+
+    local centerX = pos.X + (size.X / 2)
+    local centerY = pos.Y + (size.Y / 2.5) + inset.Y
+
+    vim:SendMouseMoveEvent(centerX, centerY, game)
+
+    task.wait()
+
+    vim:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+    task.wait(0.1)
+    vim:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+end
+
+--========================
+-- TELEPORT TO PORTAL
+--========================
+
+local function teleportToPortal(portal)
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+
+    if hrp and portal then
+        hrp.CFrame = portal.CFrame + Vector3.new(0, 3, 0)
+    end
+end
+
+--========================
+-- MAIN LOOP
+--========================
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+
+        if isLobby() then
+
+            if isPlayerStuck() then
+                selectedPortal = nil
+            end
+
+            if not selectedPortal then
+
+                local portal = getLegacyPortal()
+
+                if portal then
+                    selectedPortal = portal
+                    teleportToPortal(selectedPortal)
+                    task.wait(1)
+                end
+
+            else
+                pressTeleportButton()
+            end
+
+        else
+            selectedPortal = nil
+            stillTime = 0
+            lastPosition = nil
+        end
+    end
+end)
