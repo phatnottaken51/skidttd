@@ -1,0 +1,288 @@
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local money = player:WaitForChild("leaderstats"):WaitForChild("Money")
+local troops = workspace:WaitForChild("Troops")
+
+--========================
+-- REMOTES (à¹€à¸žà¸´à¹ˆà¸¡ SELL à¹€à¸‚à¹‰à¸²à¹„à¸›à¹ƒà¸«à¹‰à¸”à¹‰à¸§à¸¢)
+--========================
+
+local function sell(unit)
+    if not unit or not unit.Parent then return end
+    local args = {
+        [1] = {
+            [1] = {
+                [1] = "\226\129\130$", 
+                [2] = unit
+            }
+        }
+    }
+    RS.NetworkingContainer.DataRemote:FireServer(unpack(args))
+end
+
+--========================
+-- WAVE CHECK
+--========================
+
+local waveLabel = player.PlayerGui.Match.TopFrame:WaitForChild("WaveNumber")
+
+local function getWave()
+    local txt = tostring(waveLabel.Text)
+    local num = tonumber(txt:match("%d+"))
+    return num or 0
+end
+
+local function canSkip()
+    local wave = getWave()
+    if wave >= 32 then return false end
+    if wave == 17 or wave == 24 or wave == 27 or wave == 32 then return false end
+    if (wave >= 1 and wave <= 16) or wave == 21 or wave == 25 or wave == 28 or wave == 31 then
+        return true
+    end
+    return false
+end
+
+--========================
+-- AUTO SKIP
+--========================
+
+task.spawn(function()
+    while task.wait(0.8) do
+        pcall(function()
+
+            if not canSkip() then
+                return
+            end
+
+            local matchGui = player.PlayerGui:FindFirstChild("Match")
+            if not matchGui then
+                return
+            end
+
+            local skip = matchGui.TopFrame:FindFirstChild("SkipWave")
+
+            if skip and skip.Visible then
+                RS.NetworkingContainer.DataRemote:FireServer({{"â‚("}})
+            end
+
+        end)
+    end
+end)
+
+--========================
+-- AUTO SELL & REPLACE
+--========================
+
+local replaceDone = false
+task.spawn(function()
+    while task.wait(0.1) do
+        pcall(function()
+            local wave = getWave()
+            if wave >= 41 and not replaceDone then
+                replaceDone = true
+                for _, v in ipairs(troops:GetChildren()) do
+                    if v.Name == "ScientistCameraman" or v.Name == "NinjaCameraman" then
+                        sell(v)
+                    end
+                end
+                
+                task.spawn(function()
+                    local lastPositions = {
+                        Vector3.new(102.883, 19.498, 138.26),
+                        Vector3.new(54.469, 19.498, 138.26),
+                        Vector3.new(44.651, 19.498, 129.981),
+                        Vector3.new(44.651, 19.498, 120.344)
+                    }
+                    for _, pos in ipairs(lastPositions) do
+                        -- à¸Ÿà¸±à¸‡à¸à¹Œà¸Šà¸±à¸™à¸™à¸µà¹‰à¸ˆà¸°à¸–à¸¹à¸à¹€à¸£à¸µà¸¢à¸à¹ƒà¸Šà¹‰à¹ƒà¸™à¸ªà¹ˆà¸§à¸™ Loadout
+                        placeAndMaxTitan(pos)
+                    end
+                end)
+            end
+        end)
+    end
+end)
+
+--========================
+-- CORE HELPERS
+--========================
+
+local function waitMoney(amount)
+    while money.Value < amount do
+        money:GetPropertyChangedSignal("Value"):Wait()
+    end
+    task.wait(0.1)
+end
+
+local function countUnit(unitName)
+    local c = 0
+    for _,v in ipairs(troops:GetChildren()) do
+        if v.Name == unitName then c += 1 end
+    end
+    return c
+end
+
+local function place(unitName, position, slot)
+    local before = countUnit(unitName)
+    local args = {
+        [1] = {
+            [1] = {
+                [1] = "\226\129\130\22",
+                [2] = unitName,
+                [3] = position,
+                [4] = slot
+            }
+        }
+    }
+    RS.NetworkingContainer.DataRemote:FireServer(unpack(args))
+    local t = 0
+    while t < 10 do
+        task.wait(0.3)
+        if countUnit(unitName) > before then return true end
+        t += 1
+    end
+    return false
+end
+
+local function upgrade(unit)
+    if not unit or not unit.Parent then return end
+    local args = {
+        [1] = {
+            [1] = {
+                [1] = "\226\129\130#",
+                [2] = unit
+            }
+        }
+    }
+    RS.NetworkingContainer.DataRemote:FireServer(unpack(args))
+    task.wait(0.2)
+end
+
+local function updateValues(unitName)
+    local index = 0
+    for _,v in ipairs(troops:GetChildren()) do
+        if v.Name == unitName then
+            index += 1
+            local val = v:FindFirstChild("Value")
+            if not val then
+                val = Instance.new("IntValue", v)
+                val.Name = "Value"
+            end
+            val.Value = index
+        end
+    end
+end
+
+local function getLatest(unitName)
+    local latest = nil
+    local highest = 0
+    for _,v in ipairs(troops:GetChildren()) do
+        if v.Name == unitName then
+            local val = v:FindFirstChild("Value")
+            if val and val.Value > highest then
+                highest = val.Value
+                latest = v
+            end
+        end
+    end
+    return latest
+end
+
+local function safePlace(unitName, pos, slot)
+    local price = 100
+    if unitName == "NinjaCameraman" then price = 200
+    elseif unitName == "MechCameraman" then price = 400
+    elseif unitName == "MedicCameraman" then price = 300
+    elseif unitName == "UpgradedTitanSpeakerman" then price = 1000 end
+    
+    waitMoney(price)
+    local ok = false
+    while not ok do
+        ok = place(unitName, pos, slot)
+        task.wait(0.5)
+    end
+    updateValues(unitName)
+    return getLatest(unitName)
+end
+
+--========================
+-- UNIT FUNCTIONS
+--========================
+
+local function placeScientist(pos)
+    return safePlace("ScientistCameraman", pos, 1)
+end
+
+local function placeNinja(pos)
+    return safePlace("NinjaCameraman", pos, 1)
+end
+
+local function placeAndMaxMech(pos)
+    local mech = safePlace("MechCameraman", pos, 1)
+    local upgrades = {300, 500, 800, 1000}
+    for _,c in ipairs(upgrades) do
+        waitMoney(c)
+        upgrade(mech)
+    end
+end
+
+local function placeAndMaxMedic(pos)
+    local medic = safePlace("MedicCameraman", pos, 1)
+    local upgrades = {500, 1000, 4000}
+    for _,c in ipairs(upgrades) do
+        waitMoney(c)
+        upgrade(medic)
+    end
+end
+
+local function placeAndMaxTitan(pos)
+    local titan = safePlace("UpgradedTitanSpeakerman", pos, 1)
+    local upgrades = {1000, 2000, 4000, 6000}
+    for _,c in ipairs(upgrades) do
+        waitMoney(c)
+        upgrade(titan)
+    end
+end
+
+--========================
+-- LOADOUT
+--========================
+
+local SCIENTIST_UPGRADES = {300, 600}
+local scientists = {}
+
+table.insert(scientists, placeScientist(Vector3.new(38.443, 16.78, 130.516)))
+table.insert(scientists, placeScientist(Vector3.new(43.155, 16.78, 130.516)))
+placeNinja(Vector3.new(60.076, 16.78, 137.71))
+table.insert(scientists, placeScientist(Vector3.new(38.443, 16.78, 134.971)))
+placeAndMaxMech(Vector3.new(77.2, 19.498, 152.88))
+table.insert(scientists, placeScientist(Vector3.new(43.155, 16.78, 134.946)))
+
+waitMoney(SCIENTIST_UPGRADES[1])
+if scientists[1] then upgrade(scientists[1]) end
+if scientists[2] then upgrade(scientists[2]) end
+
+waitMoney(SCIENTIST_UPGRADES[2])
+if scientists[1] then upgrade(scientists[1]) end
+if scientists[2] then upgrade(scientists[2]) end
+
+placeAndMaxMech(Vector3.new(68.094, 19.498, 149.221))
+placeAndMaxMech(Vector3.new(67.65, 19.498, 157.921))
+placeAndMaxMedic(Vector3.new(62.642, 16.78, 152.958))
+placeAndMaxMech(Vector3.new(57.788, 19.498, 149.339))
+placeAndMaxMech(Vector3.new(57.405, 19.498, 158.089))
+
+placeAndMaxTitan(Vector3.new(70.24, 24.67, 138.26))
+placeAndMaxTitan(Vector3.new(86.89, 24.67, 138.26))
+placeAndMaxTitan(Vector3.new(63.872, 24.67, 123.837))
+placeAndMaxTitan(Vector3.new(79.476, 24.67, 124.355))
+
+while getWave() < 42 do task.wait(1) end
+
+placeAndMaxTitan(Vector3.new(102.883, 24.67, 138.26))
+placeAndMaxTitan(Vector3.new(54.469, 24.67, 138.26))
+placeAndMaxTitan(Vector3.new(44.651, 24.67, 129.981))
+placeAndMaxTitan(Vector3.new(44.651, 24.67, 120.344))
+placeAndMaxTitan(Vector3.new(111.821, 24.67, 124.517))
